@@ -1,6 +1,9 @@
 # PlatformIO build artifacts and downloaded toolchains/libraries
 .pio/
 
+# NodeMeshX1 IC design — long-term research, maintained separately
+NodeMeshX1 IC Design (Sensor Packet Router)/
+
 # IDE / OS
 .vscode/
 *.lck
