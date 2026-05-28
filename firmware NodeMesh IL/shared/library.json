@@ -1,0 +1,9 @@
+{
+  "name": "nodemesh-shared",
+  "version": "1.0.0",
+  "description": "Shared packet codec and types for NodeMesh IL firmware",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "include"
+  }
+}

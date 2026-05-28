@@ -1,0 +1,54 @@
+# @NODEMESH_SPEC.md: NodeMesh IL Architecture
+**Project:** SixEyes 6-DOF Robotic Arm (Embedded Imitation Learning)
+**Framework:** NodeMesh (Distributed Microcontroller-Class Imitation Learning)
+**Target:** Standalone On-Device Behavioral Cloning Training & Inference
+**Goal:** Teleoperation data collection, on-chip behavioral cloning training, and autonomous policy deployment, entirely within a sub-$30 ESP32 cluster with no external compute.
+
+## 1. Hardware Topology (The NodeMesh)
+The system is a "Laptop-less" edge cluster consisting of four (4) asynchronous nodes:
+
+* **NODE_0 (Orchestrator):** ESP32-S3 (8MB PSRAM + MicroSD).
+    * **Role:** Orchestrator/Brain. Runs behavioral cloning training and IL inference, manages SD logging, and executes IK.
+    * **Actuators:** Controls **4x TMC2209** Stepper Drivers + **3x Servos** (Wrist/Gripper).
+    * **Dual-Driver Configuration:** The Shoulder DOF utilizes **two (2) TMC2209 drivers** in parallel to distribute current load and prevent overheating. These must receive identical STEP/DIR signals for synchronized movement.
+* **NODE_1 (Input):** ESP32-C6.
+    * **Role:** Teleoperation Node. Reads 6x 12-bit ADC (Potentiometers) from the Leader Arm.
+    * **Comms:** Wired UART @ 921600 baud to NODE_0.
+* **NODE_2 & NODE_3 (Perception):** 2x ESP32-CAM (AI Thinker OV2640).
+    * **Role:** Visual Feature Extraction. Node_2 (Global Tripod), Node_3 (Eye-in-Hand).
+    * **Comms:** Wireless **ESP-NOW** to NODE_0.
+
+## 2. Firmware Strategy: "Microcontroller-Class Imitation Learning"
+Transitioning from Python/Laptop control to a distributed C++ (Arduino/ESP-IDF) framework.
+
+### A. Data Flow (Teleoperation/Training)
+1.  **NODE_1 (C6)** streams raw joint angles to **NODE_0**.
+2.  **NODE_2/3 (ESP32-CAMs)** capture frames $\rightarrow$ perform feature extraction $\rightarrow$ stream vectors to **NODE_0**.
+3.  **NODE_0 (S3)** synchronizes these streams and saves them to the **MicroSD** (Class 10, FAT32, 32KB clusters) as "Experience Packets."
+
+### B. On-Device Learning
+* **Method:** NODE_0 reads SD data into PSRAM for training.
+* **Logic:** Perform lightweight mapping (KNN or MLP) between Vision Vectors and Action Tokens.
+
+## 3. Critical Technical Constraints for Copilot
+* **Stepper Synchronization:** Axis 0 (Shoulder) signals must be mirrored across two GPIO sets or tied to the same hardware timer to ensure the two TMC2209s move the shoulder in perfect lockstep.
+* **Communication:** Use a packet-based binary format.
+    * `struct ExperiencePacket { uint32_t timestamp; float joints[6]; uint8_t vision_features[128]; }`
+* **Motion Control:** * Steppers: Use high-frequency interrupt-driven pulses (e.g., `FastAccelStepper`).
+    * Servos: Use `LEDC` or `MCPWM` for jitter-free operation.
+* **Memory:** Strictly utilize `ps_malloc` for Vision Buffers and training datasets to protect the 512KB Internal SRAM.
+
+## 4. Immediate Coding Tasks
+1.  **Dual-Driver Implementation:** Setup the pulse generation logic for the 4th TMC2209 on NODE_0.
+2.  **Porting:** Port Python-based IK from `/sixeyes/` to C++ for NODE_0.
+3.  **UART Pipeline:** Establish high-speed non-blocking UART read on NODE_0 for the NODE_1 stream.
+4.  **SD Handler:** Create a circular buffer system to write telemetry data to SD without blocking the motion control loop.
+
+## 5. Misc
+-> need to add pinout for an external SD card module. Will need 6 pins connected between the S3 and the SD module.
+	1. Power (2 pins): VCC (usually 5V or 3.3V) and GND.
+	2. Data/SPI (4 pins): These are the "talking" pins.
+	3. MOSI (Master Out Slave In)
+	4. MISO (Master In Slave Out)
+	5. SCK (Serial Clock)
+	6. CS (Chip Select)

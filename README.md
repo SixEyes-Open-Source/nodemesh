@@ -18,13 +18,13 @@ NodeMesh mode differences:
 
 ## Repository Scope
 
-- Firmware architecture and implementation work for NodeMesh VLA
+- Firmware architecture and implementation work for NodeMesh Imitation Learning (IL)
 - Node-level documentation, pinout references, and deployment notes
 - NodeMeshX1 IC design artifacts and supporting references
 
 ## Directory Structure
 
-- firmware NodeMesh VLA/: Multi-node firmware scaffold and implementation for Node0 through Node3, with shared packet protocol code and technical docs
+- firmware NodeMesh IL/: Multi-node firmware scaffold and implementation for Node0 through Node3, with shared packet protocol code and technical docs
 - NodeMeshX1 IC Design (Sensor Packet Router)/: NodeMeshX1 design notes and related IC research material
 
 ## Relationship to SixEyes

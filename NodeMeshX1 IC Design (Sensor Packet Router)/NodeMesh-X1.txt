@@ -1,11 +1,11 @@
 # Project Title: NodeMesh-X1
 
-## Subtitle: High-Performance RTL-to-GDSII Implementation of a VLA Sensor Packet Router
+## Subtitle: High-Performance RTL-to-GDSII Implementation of a NodeMesh IL Sensor Packet Router
 
 ### 1. Project Overview
 
 * **Domain:** Digital IC Design / Physical Design
-* **Core Objective:** To design, synthesize, and harden a custom hardware accelerator block for the **NodeMeshVLA** architecture. The project focuses on converting a high-level architectural concept into a manufacturable **GDSII** blueprint using an automated EDA flow.
+* **Core Objective:** To design, synthesize, and harden a custom hardware accelerator block for the **NodeMesh IL** architecture. The project focuses on converting a high-level architectural concept into a manufacturable **GDSII** blueprint using an automated EDA flow.
 * **Key Design Goal:** Achieving timing closure at **250MHz** on the **SkyWater 130nm** Open Source PDK.
 
 ---

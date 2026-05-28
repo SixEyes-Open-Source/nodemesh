@@ -1,0 +1,8 @@
+# PlatformIO build artifacts and downloaded toolchains/libraries
+.pio/
+
+# IDE / OS
+.vscode/
+*.lck
+Thumbs.db
+.DS_Store
