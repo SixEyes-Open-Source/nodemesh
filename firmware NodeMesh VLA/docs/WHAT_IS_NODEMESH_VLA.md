@@ -4,6 +4,8 @@
 
 NodeMeshVLA is a way of giving a robotic arm its own distributed "nervous system" so it can sense, learn, and act directly on-device without needing a constant laptop connection. Instead of one computer doing everything, multiple tiny processors cooperate in real time: one reads human input, two understand visual context, and one coordinates motion and learning. The significance is reliability, portability, and lower latency: the robot can keep working in places where a full external computer setup is inconvenient, fragile, or unavailable.
 
+NodeMeshVLA is an optional mode layered on top of SixEyes-compatible hardware. The standard SixEyes workflow remains valid without NodeMesh and can continue using laptop-attached perception.
+
 ## 2) Full Technical Breakdown (Engineer/Developer)
 
 This section captures the full technical scope defined for SixEyes NodeMeshVLA and the current implementation direction.
@@ -30,12 +32,12 @@ NodeMeshVLA uses four asynchronous nodes with explicit task separation:
 - Samples 6 channels of 12-bit analog input from leader arm potentiometers.
 - Publishes joint-state stream to NODE_0 over high-speed wired UART.
 
-3. NODE_2 Perception Global (ESP32-S3 CAM)
+3. NODE_2 Perception Global (ESP32-CAM class node, ESP32-S3 CAM variant possible)
 - Captures global camera perspective.
 - Performs local feature extraction.
 - Sends compact feature vector stream wirelessly to NODE_0.
 
-4. NODE_3 Perception Wrist (ESP32-S3 CAM)
+4. NODE_3 Perception Wrist (ESP32-CAM class node, ESP32-S3 CAM variant possible)
 - Captures eye-in-hand camera perspective.
 - Performs local feature extraction.
 - Sends compact feature vector stream wirelessly to NODE_0.
@@ -107,7 +109,7 @@ Dual-driver shoulder requirement:
 ### 2.7 TMC2209 Control Strategy and Pin Policy
 
 Current selected hardware policy:
-- Shared EN: yes (`EN_ALL` on GPIO6).
+- Shared EN: yes (`EN_ALL` on GPIO14).
 - Separate PDN_UART lines: yes (one PDN select per driver).
 
 Why:
@@ -116,12 +118,12 @@ Why:
 - Fully shared PDN bus would require driver-addressing strategy and firmware refactor to avoid contention.
 
 Follower signal map in active revision:
-- STEP: GPIO4, 8, 12, 16
-- DIR: GPIO5, 9, 13, 17
-- EN_ALL: GPIO6
-- PDN: GPIO7, 11, 15, 21
-- Servos: GPIO35, 36, 37
-- Inter-board UART: RX GPIO38, TX GPIO39
+- STEP: GPIO12, 9, 15, 5
+- DIR: GPIO11, 8, 7, 4
+- EN_ALL: GPIO14
+- PDN: GPIO13, 10, 16, 6
+- Servos: GPIO40, 41, 42
+- Inter-board UART: RX GPIO18, TX GPIO17
 
 ### 2.8 Communications Breakdown
 
@@ -133,6 +135,7 @@ Follower signal map in active revision:
 2. Wireless ESP-NOW (NODE_2/3 -> NODE_0)
 - Lightweight, low-overhead telemetry from camera nodes.
 - Requires packet sizing discipline and retry/error instrumentation.
+- Practical default direction is compact feature packets from low-cost camera nodes rather than raw frame transport.
 
 3. USB serial path (development/telemetry)
 - Used for diagnostics and bridge-style observability.
@@ -185,10 +188,11 @@ SPI six-wire pattern:
 - Signals: SCK, MISO, MOSI, CS.
 
 Current Node0 wiring plan:
-- SCK GPIO40
-- MISO GPIO41
-- MOSI GPIO42
-- CS GPIO2
+- SCK GPIO36
+- MISO GPIO37
+- MOSI GPIO35
+- CS GPIO38
+- CD GPIO39 (optional card detect)
 
 Constraints:
 - Keep traces short, especially clock.

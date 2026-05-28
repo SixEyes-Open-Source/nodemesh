@@ -4,6 +4,18 @@ NodeMesh is the distributed firmware and hardware development track for the SixE
 
 This repository hosts NodeMesh-focused assets that are maintained independently from the main SixEyes repository to support faster iteration on multi-node architecture, communication, and deployment workflows.
 
+## How This Relates To Standard SixEyes
+
+NodeMesh is optional.
+
+- Standard users should start in the sixeyes repository for normal arm hardware and firmware workflows.
+- NodeMesh is an additional firmware system that can be flashed on compatible SixEyes hardware when you want edge-only multi-MCU operation.
+
+NodeMesh mode differences:
+- Uses dedicated camera-node MCUs for onboard perception (low-cost ESP32-CAM is a supported direction).
+- Uses ESP-NOW for inter-node perception transport.
+- Uses SD logging as part of on-device data and learning workflows.
+
 ## Repository Scope
 
 - Firmware architecture and implementation work for NodeMesh VLA
