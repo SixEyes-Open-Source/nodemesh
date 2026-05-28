@@ -34,7 +34,7 @@ VISION_BYTES    = 128
 # struct ExperiencePacket (packed, little-endian):
 #  magic(4) version(1) source_node(1) payload_len(2)
 #  timestamp_us(4) seq(4) joints(6×f4) vision(128×u1) crc16(2)
-PACKET_FMT  = "<IBBHIi6f128Bh"   # NOTE: crc16 stored as signed short on wire
+PACKET_FMT  = "<IBBHII6f128Bh"   # NOTE: crc16 stored as signed short on wire
 PACKET_SIZE = struct.calcsize(PACKET_FMT)   # should be 170
 
 assert PACKET_SIZE == 170, f"Unexpected packet size {PACKET_SIZE}"
