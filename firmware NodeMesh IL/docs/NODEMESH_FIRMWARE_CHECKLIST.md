@@ -39,14 +39,17 @@
 - [x] Add session boundary markers to SD log (SessionHeader: magic, session_id from NVS, start_epoch_s, packet_count at offset 0).
 - [x] Add packet sequence numbers to `ExperiencePacket` for gap detection during offline replay.
 - [x] Build offline log validation script (reads binary log, checks CRCs and sequence continuity).
-- [ ] Add packet-level integration tests for node1 → node0 and cam nodes → node0.
-- [ ] Add fault-injection tests for heartbeat timeout and motor disable behavior.
+- [x] Add packet-level integration tests for node1 → node0 and cam nodes → node0.
+- [x] Add fault-injection tests for heartbeat timeout and motor disable behavior.
 - [ ] **Target: 100 clean teleoperation episodes recorded to SD.**
 
 ## Phase C — Vision Upgrade (needed for spatial tasks)
 
 - [x] Replace global grayscale histogram with 8×8 spatial grid of mean brightness (64 values, same packet size).
-- [ ] Evaluate whether ESP32-CAM can decode JPEG to get luminance-only quickly enough for 30 FPS feature extraction.
+- [x] Evaluate whether ESP32-CAM can decode JPEG to get luminance-only quickly enough for 30 FPS feature extraction.
+      **Result:** Not needed. Raw QQVGA grayscale path completes in ~13.4 ms/frame (74.9 FPS max), leaving ~20 ms of slack.
+      Full JPEG decode (TJpgDec) adds 5.5 ms with no capture speedup. DC-only partial decoder saves trivially but requires
+      ~200 lines of custom bitstream code and is fragile. Keep `PIXFORMAT_GRAYSCALE`. See `tools/eval_jpeg_timing.py`.
 - [x] Update `ExperiencePacket` vision feature interpretation in `IkSolver` and `IlTrainer` after format change.
 
 ## Phase D — On-Device Behavioral Cloning (`IlTrainer`)
