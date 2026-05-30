@@ -52,64 +52,24 @@ bool IkSolver::solvePlanar2Link(float x_mm, float y_mm, float &shoulder_deg,
 
 bool IkSolver::solveFromPacket(const nodemesh::ExperiencePacket &packet,
                                std::array<float, 6> &joint_targets_deg) {
-  // Base yaw is passed through from teleop input.
-  joint_targets_deg[0] = packet.joints[0] * 180.0f;
+  // Node1 pots are mounted directly on the leader arm joints.
+  // Each packet.joints[i] is a normalized ADC reading in [0, 1].
+  // Map linearly to the per-joint degree range defined in calibration_config.h.
+  // No IK or Cartesian conversion — this is a direct joint-space passthrough.
 
-  // Map normalized packet joints into a planar workspace for shoulder/elbow IK.
-  const float x_mm = lerp(calib::kReachXMinMm, calib::kReachXMaxMm,
-                          clampf(packet.joints[1], 0.0f, 1.0f));
-  const float y_mm = lerp(calib::kReachYMinMm, calib::kReachYMaxMm,
-                          clampf(packet.joints[2], 0.0f, 1.0f));
+  static const float kMin[6] = {
+      calib::kJointMin0, calib::kJointMin1, calib::kJointMin2,
+      calib::kJointMin3, calib::kJointMin4, calib::kJointMin5,
+  };
+  static const float kMax[6] = {
+      calib::kJointMax0, calib::kJointMax1, calib::kJointMax2,
+      calib::kJointMax3, calib::kJointMax4, calib::kJointMax5,
+  };
 
-  float shoulder_deg = 0.0f;
-  float elbow_deg = 0.0f;
-  if (!solvePlanar2Link(x_mm, y_mm, shoulder_deg, elbow_deg)) {
-    return false;
+  for (size_t i = 0; i < 6; ++i) {
+    const float t = clampf(packet.joints[i], 0.0f, 1.0f);
+    joint_targets_deg[i] = lerp(kMin[i], kMax[i], t);
   }
-
-  joint_targets_deg[1] = shoulder_deg;
-  joint_targets_deg[2] = elbow_deg;
-
-  // Vision features are now a 8x8 spatial grid (out[row*8+col] = mean brightness).
-  // Compute horizontal (x) and vertical (y) brightness centroids in [0,1].
-  // These are used as a mild wrist stabilization hint only — not primary control.
-  float total   = 0.0f;
-  float cx_sum  = 0.0f;
-  float cy_sum  = 0.0f;
-  constexpr size_t kGridCols = 8;
-  constexpr size_t kGridRows = 8;
-  for (size_t r = 0; r < kGridRows; ++r) {
-    for (size_t c = 0; c < kGridCols; ++c) {
-      const float v = static_cast<float>(packet.vision_features[r * kGridCols + c]);
-      total   += v;
-      cx_sum  += v * (static_cast<float>(c) / (kGridCols - 1));
-      cy_sum  += v * (static_cast<float>(r) / (kGridRows - 1));
-    }
-  }
-
-  float brightness = 0.5f;  // fallback
-  float cx = 0.5f;
-  float cy = 0.5f;
-  if (total > 1.0f) {
-    cx = cx_sum / total;
-    cy = cy_sum / total;
-    brightness = total / (kGridCols * kGridRows * 255.0f);
-  }
-
-  const float wrist_pitch_base = packet.joints[3] * 180.0f;
-  const float wrist_yaw_base = packet.joints[4] * 180.0f;
-  const float gripper_base = packet.joints[5] * 180.0f;
-
-  // Small correction terms from spatial centroid to aid wrist orientation.
-  // cx/cy are in [0,1]; 0.5 = centred = no correction.
-  const float pitch_correction = (cy - 0.5f) * calib::kWristPitchVisionGainDeg;
-  const float yaw_correction   = (cx - 0.5f) * calib::kWristYawVisionGainDeg;
-
-  joint_targets_deg[3] =
-      clampf(wrist_pitch_base + pitch_correction, calib::kServoMinDeg, calib::kServoMaxDeg);
-  joint_targets_deg[4] =
-      clampf(wrist_yaw_base + yaw_correction, calib::kServoMinDeg, calib::kServoMaxDeg);
-  joint_targets_deg[5] = clampf(gripper_base, calib::kServoMinDeg, calib::kServoMaxDeg);
 
   return true;
 }

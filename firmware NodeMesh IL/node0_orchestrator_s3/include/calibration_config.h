@@ -12,18 +12,13 @@ constexpr uint32_t kControlLoopHz = 400;
 constexpr uint32_t kNode1Baud = 921600;
 constexpr size_t kPacketQueueDepth = 64;
 
-// IK geometry and workspace normalization.
-// Segment lengths: tech reference specifies 500 mm total reach → 250 mm per link.
-// TODO: verify kUpperArmMm, kForearmMm with physical calipers before bench testing.
+// IK geometry constants (kept for reference; not used in direct-passthrough teleop).
 constexpr float kUpperArmMm = 250.0f;
 constexpr float kForearmMm  = 250.0f;
-// Teleop workspace bounds (mm in shoulder-pivot frame, elbow-up solution).
-// Scaled proportionally from the 140 mm placeholder geometry.
-// TODO: tune these limits to match actual collision envelope on the physical arm.
-constexpr float kReachXMinMm =  70.0f;   // near-body minimum extension
-constexpr float kReachXMaxMm = 430.0f;   // near-full extension (L1+L2 = 500 mm)
-constexpr float kReachYMinMm = -180.0f;  // negative = behind shoulder plane
-constexpr float kReachYMaxMm =  320.0f;  // upward / forward reach
+constexpr float kReachXMinMm =  70.0f;
+constexpr float kReachXMaxMm = 430.0f;
+constexpr float kReachYMinMm = -180.0f;
+constexpr float kReachYMaxMm =  320.0f;
 
 // Servo clamp range for generated degree commands.
 constexpr float kServoMinDeg = 0.0f;
@@ -44,10 +39,6 @@ constexpr float kMotionLpfAlpha = 0.08f;
 
 // Stepper resolution: 1.8 deg/full-step, 16 microsteps.
 constexpr float kDegPerMicrostep = 1.8f / 16.0f;  // 0.1125 deg/step
-
-// Vision-conditioned wrist correction gains.
-constexpr float kWristPitchVisionGainDeg = 16.0f;
-constexpr float kWristYawVisionGainDeg = 12.0f;
 
 // Camera input freshness window.
 constexpr uint32_t kVisionStaleMs = 300;
