@@ -61,11 +61,17 @@ void handleSerialCommands() {
       } else if (buf == "mode infer") {
         saveMode(NodeMode::kInfer);
         Serial.println("[Node0][CMD] mode -> INFER");
+      } else if (buf == "ep start") {
+        node0::SdLogger::instance().beginEpisode();
+      } else if (buf == "ep stop") {
+        node0::SdLogger::instance().endEpisode();
       } else if (buf == "status") {
-        Serial.printf("[Node0][CMD] mode=%s\n",
-                      g_mode == NodeMode::kTeleopLog ? "TELEOP_LOG" : "INFER");
+        Serial.printf("[Node0][CMD] mode=%s  episode=%u  ep_open=%s\n",
+                      g_mode == NodeMode::kTeleopLog ? "TELEOP_LOG" : "INFER",
+                      static_cast<unsigned>(node0::SdLogger::instance().currentEpisode()),
+                      node0::SdLogger::instance().episodeOpen() ? "yes" : "no");
       } else if (buf.length() > 0) {
-        Serial.println("[Node0][CMD] unknown command (try: mode teleop / mode infer / status)");
+        Serial.println("[Node0][CMD] unknown command (try: mode teleop / mode infer / ep start / ep stop / status)");
       }
       buf = "";
     } else {
@@ -107,7 +113,7 @@ void setup() {
   node0::IkSolver::instance().begin();
   node0::IlTrainer::instance().begin();
 
-  Serial.println("[Node0] Boot complete. Commands: mode teleop / mode infer / status");
+  Serial.println("[Node0] Boot complete. Commands: mode teleop / mode infer / ep start / ep stop / status");
 }
 
 // ---------------------------------------------------------------------------

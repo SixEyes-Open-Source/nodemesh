@@ -26,8 +26,10 @@ from typing import Optional
 
 SESSION_MAGIC   = 0x4E4D4C47   # "NMLG"
 PACKET_MAGIC    = 0x4E4D5650   # "NMVP"
+EPISODE_MAGIC   = 0x4E4D4550   # "NMEP"
 PACKET_VERSION  = 1
 HEADER_SIZE     = 32           # sizeof(SessionHeader)
+EPISODE_MARKER_SIZE = 32       # sizeof(EpisodeMarker)
 JOINT_COUNT     = 6
 VISION_BYTES    = 128
 
@@ -43,6 +45,11 @@ assert PACKET_SIZE == 170, f"Unexpected packet size {PACKET_SIZE}"
 #  magic(4) session_id(4) start_epoch_s(4) packet_count(4) reserved(16)
 HEADER_FMT  = "<IIII16s"
 assert struct.calcsize(HEADER_FMT) == HEADER_SIZE
+
+# struct EpisodeMarker (packed, little-endian):
+#  magic(4) episode_id(4) event(1) reserved0(1) reserved1(2) timestamp_ms(4) reserved2(16)
+EPISODE_FMT  = "<IIBBHI16s"
+assert struct.calcsize(EPISODE_FMT) == EPISODE_MARKER_SIZE
 
 
 # ---------------------------------------------------------------------------
@@ -91,14 +98,25 @@ class PacketRecord:
 
 
 @dataclass
+class EpisodeSlice:
+    episode_id: int
+    start_offset: int
+    stop_offset: Optional[int]    # None if ep stop not yet seen
+    start_ms: int
+    stop_ms: Optional[int]
+    packet_indices: list = field(default_factory=list)  # indices into result.packets
+
+
+@dataclass
 class ValidationResult:
     session: Optional[SessionInfo] = None
     total_packets: int = 0
     crc_errors: int = 0
-    seq_gaps: dict = field(default_factory=dict)   # source_node → list of (expected, got) tuples
-    seq_last: dict = field(default_factory=dict)   # source_node → last seen seq
+    seq_gaps: dict = field(default_factory=dict)   # source_node -> list of (expected, got) tuples
+    seq_last: dict = field(default_factory=dict)   # source_node -> last seen seq
     truncated_tail_bytes: int = 0
     packets: list = field(default_factory=list)    # filled only when --dump-packets requested
+    episodes: list = field(default_factory=list)   # list of EpisodeSlice
 
 
 # ---------------------------------------------------------------------------
@@ -131,11 +149,46 @@ def parse_log(path: Path, max_dump: int = 0) -> ValidationResult:
             file=sys.stderr,
         )
 
-    # --- Packets ---
+    # --- Records (packets and episode markers interleaved) ---
     offset = HEADER_SIZE
     idx = 0
+    current_episode: Optional[EpisodeSlice] = None
 
-    while offset + PACKET_SIZE <= len(raw):
+    while offset < len(raw):
+        # Peek at the magic of the next record to decide its type/size.
+        if offset + 4 > len(raw):
+            break
+        peek_magic = struct.unpack_from("<I", raw, offset)[0]
+
+        # --- Episode marker ---
+        if peek_magic == EPISODE_MAGIC:
+            if offset + EPISODE_MARKER_SIZE > len(raw):
+                break
+            chunk = raw[offset: offset + EPISODE_MARKER_SIZE]
+            (ep_magic, ep_id, ep_event, _r0, _r1,
+             ep_ts_ms, _r2) = struct.unpack(EPISODE_FMT, chunk)
+
+            if ep_event == 0:  # start
+                current_episode = EpisodeSlice(
+                    episode_id=ep_id,
+                    start_offset=offset,
+                    stop_offset=None,
+                    start_ms=ep_ts_ms,
+                    stop_ms=None,
+                )
+                result.episodes.append(current_episode)
+            elif ep_event == 1:  # stop
+                if current_episode is not None and current_episode.episode_id == ep_id:
+                    current_episode.stop_offset = offset
+                    current_episode.stop_ms = ep_ts_ms
+                    current_episode = None
+
+            offset += EPISODE_MARKER_SIZE
+            continue
+
+        # --- Experience packet ---
+        if offset + PACKET_SIZE > len(raw):
+            break
         chunk = raw[offset: offset + PACKET_SIZE]
         fields = struct.unpack(PACKET_FMT, chunk)
 
@@ -144,14 +197,12 @@ def parse_log(path: Path, max_dump: int = 0) -> ValidationResult:
 
         joints = tuple(rest[:JOINT_COUNT])
         vision = bytes(rest[JOINT_COUNT: JOINT_COUNT + VISION_BYTES])
-        # crc16 is last field (rest[-1]); stored as signed int from struct fmt
-        # but we verify via raw bytes
         crc_ok = verify_crc(chunk)
 
         if magic != PACKET_MAGIC:
-            # Likely hit padding/garbage in circular region; stop.
+            # Hit padding/garbage in circular region; stop.
             print(
-                f"  [offset 0x{offset:08X}] packet #{idx}: bad magic "
+                f"  [offset 0x{offset:08X}] record #{idx}: unknown magic "
                 f"0x{magic:08X} — stopping parse.",
                 file=sys.stderr,
             )
@@ -182,11 +233,15 @@ def parse_log(path: Path, max_dump: int = 0) -> ValidationResult:
         if max_dump > 0 and idx < max_dump:
             result.packets.append(rec)
 
+        # Track which episode this packet belongs to
+        if current_episode is not None:
+            current_episode.packet_indices.append(idx)
+
         result.total_packets += 1
         offset += PACKET_SIZE
         idx += 1
 
-    # Leftover bytes after last full packet
+    # Leftover bytes after last full record
     tail = len(raw) - offset
     if tail > 0:
         result.truncated_tail_bytes = tail
@@ -259,6 +314,23 @@ def print_report(result: ValidationResult, path: Path) -> None:
             last = result.seq_last[node]
             gaps = len(result.seq_gaps.get(node, []))
             print(f"  {name:20s}  last_seq={last:<8}  gap_events={gaps}")
+
+    print()
+    print(f"--- Episodes ---")
+    if not result.episodes:
+        print("  No episode markers found.")
+        print("  (Use 'ep start' / 'ep stop' over serial to record episode boundaries.)")
+    else:
+        for ep in result.episodes:
+            dur = ""
+            if ep.stop_ms is not None:
+                dur = f"  dur={ep.stop_ms - ep.start_ms} ms"
+            status = "closed" if ep.stop_ms is not None else "OPEN (no ep stop)"
+            print(f"  Episode {ep.episode_id:3d}: {status}{dur}  packets={len(ep.packet_indices)}")
+        total_ep_pkts = sum(len(ep.packet_indices) for ep in result.episodes)
+        closed = sum(1 for ep in result.episodes if ep.stop_ms is not None)
+        print(f"  Total: {len(result.episodes)} episodes ({closed} closed)  "
+              f"{total_ep_pkts} packets inside markers")
 
     # Overall pass/fail
     print()

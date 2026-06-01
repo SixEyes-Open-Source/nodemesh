@@ -163,4 +163,53 @@ void SdLogger::flushOnce() {
   }
 }
 
+void SdLogger::beginEpisode() {
+  if (episode_open_) {
+    Serial.println("[Node0][SD] ep start ignored: episode already open");
+    return;
+  }
+  ++episode_id_;
+  episode_open_ = true;
+  writeEpisodeMarker(0);
+  Serial.printf("[Node0][SD] episode %u START\n", static_cast<unsigned>(episode_id_));
+}
+
+void SdLogger::endEpisode() {
+  if (!episode_open_) {
+    Serial.println("[Node0][SD] ep stop ignored: no episode open");
+    return;
+  }
+  episode_open_ = false;
+  writeEpisodeMarker(1);
+  Serial.printf("[Node0][SD] episode %u STOP  packets_so_far=%u\n",
+                static_cast<unsigned>(episode_id_),
+                static_cast<unsigned>(session_packet_count_));
+}
+
+void SdLogger::writeEpisodeMarker(uint8_t event) {
+  if (!ensureFileReady()) {
+    return;
+  }
+
+  constexpr size_t kMarkerBytes = sizeof(EpisodeMarker);
+  if (write_offset_ + kMarkerBytes > kLogBytes) {
+    write_offset_ = kHeaderBytes;
+  }
+
+  if (!log_file_.seek(write_offset_)) {
+    Serial.println("[Node0][SD] marker seek failed");
+    return;
+  }
+
+  EpisodeMarker marker{};
+  marker.magic        = kEpisodeMagic;
+  marker.episode_id   = episode_id_;
+  marker.event        = event;
+  marker.timestamp_ms = millis();
+
+  log_file_.write(reinterpret_cast<const uint8_t *>(&marker), kMarkerBytes);
+  log_file_.flush();
+  write_offset_ += kMarkerBytes;
+}
+
 } // namespace node0
