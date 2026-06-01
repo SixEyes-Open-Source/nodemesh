@@ -212,4 +212,32 @@ void SdLogger::writeEpisodeMarker(uint8_t event) {
   write_offset_ += kMarkerBytes;
 }
 
+void SdLogger::clearLog() {
+  if (episode_open_) {
+    Serial.println("[Node0][SD] clearLog: forcing ep stop before clear");
+    episode_open_ = false; // don't write a marker — file is about to be deleted
+  }
+
+  if (log_file_) {
+    log_file_.close();
+  }
+
+  if (sd_ready_) {
+    SD.remove(kLogPath);
+    Serial.println("[Node0][SD] log file deleted");
+  }
+
+  // Reset all write-side state.
+  write_offset_         = kHeaderBytes;
+  session_packet_count_ = 0;
+  pending_flush_writes_ = 0;
+  episode_id_           = 0;
+  episode_open_         = false;
+  dropped_              = 0;
+
+  // Re-create and initialise the file so logging can resume immediately.
+  ensureFileReady();
+  Serial.println("[Node0][SD] log cleared — ready for new demos");
+}
+
 } // namespace node0

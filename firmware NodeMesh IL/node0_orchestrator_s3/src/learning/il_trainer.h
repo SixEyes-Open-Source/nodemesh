@@ -19,6 +19,15 @@ public:
   bool infer(const nodemesh::ExperiencePacket &packet,
              std::array<float, 6> &targets_deg) const;
 
+  // Scan the SD log for closed episodes (ep start + ep stop pairs) and fill
+  // the training dataset from them before the control loop starts.
+  // Only packets inside closed episodes are loaded; open or unclosed episodes
+  // are ignored so bad/incomplete demonstrations can't pollute training.
+  // If more packets are available than kDatasetCapacity, samples are drawn at
+  // a uniform stride so all episodes contribute equally.
+  // Returns the number of packets loaded.  Call once in setup() after begin().
+  size_t loadFromLog();
+
 private:
   IlTrainer() = default;
 

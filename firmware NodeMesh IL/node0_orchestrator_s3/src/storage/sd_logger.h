@@ -52,6 +52,11 @@ public:
   void beginEpisode();
   void endEpisode();
 
+  // Delete the log file and start fresh.  Resets all episode / packet state.
+  // Use over serial ('log clear') to discard bad demonstrations before
+  // re-collecting.  Irreversible — confirm before calling.
+  void clearLog();
+
   uint32_t droppedPackets()  const { return dropped_; }
   uint32_t currentEpisode()  const { return episode_id_; }
   bool     episodeOpen()     const { return episode_open_; }

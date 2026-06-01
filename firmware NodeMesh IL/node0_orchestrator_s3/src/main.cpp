@@ -65,6 +65,10 @@ void handleSerialCommands() {
         node0::SdLogger::instance().beginEpisode();
       } else if (buf == "ep stop") {
         node0::SdLogger::instance().endEpisode();
+      } else if (buf == "log clear") {
+        // Wipe the log file and reset episode state.  This is irreversible.
+        // Use before re-collecting demonstrations after a bad session.
+        node0::SdLogger::instance().clearLog();
       } else if (buf == "status") {
         Serial.printf("[Node0][CMD] mode=%s  episode=%u  ep_open=%s\n",
                       g_mode == NodeMode::kTeleopLog ? "TELEOP_LOG" : "INFER",
@@ -113,7 +117,13 @@ void setup() {
   node0::IkSolver::instance().begin();
   node0::IlTrainer::instance().begin();
 
-  Serial.println("[Node0] Boot complete. Commands: mode teleop / mode infer / ep start / ep stop / status");
+  // Preload training data from closed episodes recorded in previous sessions.
+  // This is the key step that makes NodeMesh equivalent to ACT in terms of
+  // training data: all past demonstrations are available, not just the last
+  // 1.28 s of the live ring buffer.
+  node0::IlTrainer::instance().loadFromLog();
+
+  Serial.println("[Node0] Boot complete. Commands: mode teleop / mode infer / ep start / ep stop / status / log clear");
 }
 
 // ---------------------------------------------------------------------------

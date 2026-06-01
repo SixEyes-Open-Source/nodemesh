@@ -343,4 +343,139 @@ void IlTrainer::saveWeights() const {
   (void)kWeightFloats;
 }
 
+size_t IlTrainer::loadFromLog() {
+  if (dataset_ == nullptr) return 0;
+
+  File f = SD.open("/node0_log.bin", FILE_READ);
+  if (!f) {
+    Serial.println("[Node0][IL] loadFromLog: file not found, skipping preload");
+    return 0;
+  }
+
+  const size_t file_size = f.size();
+  if (file_size < 32) { f.close(); return 0; }
+
+  // Magic constants mirrored from sd_logger.h (no circular include needed).
+  constexpr uint32_t kSessionMagic = 0x4E4D4C47UL;
+  constexpr uint32_t kPacketMagic  = 0x4E4D5650UL;
+  constexpr uint32_t kEpisodeMagic = 0x4E4D4550UL;
+  constexpr size_t   kPacketSize   = sizeof(nodemesh::ExperiencePacket);
+  constexpr size_t   kMarkerSize   = 32;
+
+  // ── Pass 1: locate all closed episode byte ranges ──────────────────────
+  // EpisodeMarker layout (packed):
+  //   magic(4) episode_id(4) event(1) reserved0(1) reserved1(2)
+  //   timestamp_ms(4) reserved2(16)  -> 32 bytes
+  // event byte is at offset 8 within the marker.
+
+  struct EpRange { uint32_t start_off; uint32_t stop_off; };
+  // Static so it isn't stack-allocated. 256 episodes * 8 bytes = 2 KB.
+  static EpRange ep_ranges[256];
+  uint16_t ep_count = 0;
+
+  bool    ep_open      = false;
+  uint32_t ep_start_off = 0;
+  size_t   scan_offset  = kMarkerSize; // skip session header
+
+  while (scan_offset + 4 <= file_size) {
+    if (!f.seek(scan_offset)) break;
+    uint32_t magic = 0;
+    if (f.read(reinterpret_cast<uint8_t *>(&magic), 4) != 4) break;
+
+    if (magic == kPacketMagic) {
+      scan_offset += kPacketSize;
+    } else if (magic == kEpisodeMagic) {
+      if (scan_offset + kMarkerSize > file_size) break;
+      // Read event byte: 4 (magic) + 4 (episode_id) = offset 8
+      if (!f.seek(scan_offset + 8)) break;
+      uint8_t event = 0xff;
+      if (f.read(&event, 1) != 1) break;
+      if (event == 0) {                      // episode start
+        ep_open       = true;
+        ep_start_off  = static_cast<uint32_t>(scan_offset + kMarkerSize);
+      } else if (event == 1 && ep_open) {    // episode stop — episode is now closed
+        if (ep_count < 256) {
+          ep_ranges[ep_count++] = {
+              ep_start_off,
+              static_cast<uint32_t>(scan_offset)
+          };
+        }
+        ep_open = false;
+      }
+      scan_offset += kMarkerSize;
+    } else if (magic == kSessionMagic) {
+      scan_offset += kMarkerSize; // session header is also 32 bytes
+    } else {
+      break; // zeros (pre-alloc padding) or corruption — end of written data
+    }
+  }
+
+  Serial.printf("[Node0][IL] loadFromLog: %u closed episode(s) found\n",
+                static_cast<unsigned>(ep_count));
+
+  if (ep_count == 0) { f.close(); return 0; }
+
+  // ── Count total packets across all closed episodes ─────────────────────
+  // Approximation: treat entire [start, stop) span as packets.
+  // This over-counts slightly if there are markers inside, but that doesn't
+  // happen in normal operation.
+  size_t total_available = 0;
+  for (uint16_t e = 0; e < ep_count; ++e) {
+    const size_t span = ep_ranges[e].stop_off - ep_ranges[e].start_off;
+    total_available += span / kPacketSize;
+  }
+
+  // Uniform stride so all episodes contribute proportionally when dataset is
+  // larger than kDatasetCapacity.
+  const size_t stride = (total_available > kDatasetCapacity)
+                        ? (total_available / kDatasetCapacity)
+                        : 1;
+
+  // ── Pass 2: load packets at uniform stride ─────────────────────────────
+  size_t loaded      = 0;
+  size_t packet_idx  = 0; // global counter across all episodes for stride
+
+  for (uint16_t e = 0; e < ep_count && loaded < kDatasetCapacity; ++e) {
+    uint32_t pos            = ep_ranges[e].start_off;
+    const uint32_t ep_stop  = ep_ranges[e].stop_off;
+
+    while (pos + kPacketSize <= ep_stop && pos + kPacketSize <= file_size
+           && loaded < kDatasetCapacity) {
+      if (!f.seek(pos)) break;
+      uint32_t magic = 0;
+      if (f.read(reinterpret_cast<uint8_t *>(&magic), 4) != 4) break;
+
+      if (magic == kPacketMagic) {
+        if ((packet_idx % stride) == 0) {
+          nodemesh::ExperiencePacket pkt{};
+          f.seek(pos);
+          if (f.read(reinterpret_cast<uint8_t *>(&pkt), kPacketSize)
+              == static_cast<int>(kPacketSize)) {
+            dataset_[write_index_] = pkt;
+            write_index_ = (write_index_ + 1) % kDatasetCapacity;
+            if (dataset_count_ < kDatasetCapacity) ++dataset_count_;
+            ++loaded;
+          }
+        }
+        ++packet_idx;
+        pos += kPacketSize;
+      } else if (magic == kEpisodeMagic) {
+        pos += kMarkerSize; // skip any stray nested marker
+      } else {
+        break;
+      }
+    }
+  }
+
+  f.close();
+  Serial.printf(
+      "[Node0][IL] loadFromLog: loaded %u/%u packets  stride=%u  dataset=%u/%u\n",
+      static_cast<unsigned>(loaded),
+      static_cast<unsigned>(total_available),
+      static_cast<unsigned>(stride),
+      static_cast<unsigned>(dataset_count_),
+      static_cast<unsigned>(kDatasetCapacity));
+  return loaded;
+}
+
 } // namespace node0
