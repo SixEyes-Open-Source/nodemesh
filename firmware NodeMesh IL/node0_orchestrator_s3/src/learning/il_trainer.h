@@ -49,6 +49,10 @@ private:
   float *b2_ = nullptr;  // [6]
   bool is_trained_ = false;
 
+  // Running MSE accumulator — reset each stats print interval.
+  float    mse_sum_   = 0.0f;
+  uint32_t mse_count_ = 0;
+
   void initWeightsKaiming();
   bool loadWeights();
   void saveWeights() const;

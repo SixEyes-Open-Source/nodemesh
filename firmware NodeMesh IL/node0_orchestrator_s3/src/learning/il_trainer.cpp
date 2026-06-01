@@ -113,10 +113,23 @@ void IlTrainer::trainStep() {
     const float denom = stats_samples_ > 1 ? static_cast<float>(stats_samples_ - 1) : 1.0f;
     const float joint0_std = sqrtf(joint_m2_[0] / denom);
     const float vision_std = sqrtf(vision_m2_intensity_ / denom);
-    Serial.printf(
-        "[Node0][IL] trainStep n=%u storage=%s j0_mean=%.3f j0_std=%.3f vis_mean=%.2f vis_std=%.2f\n",
-        static_cast<unsigned>(dataset_count_), using_psram_ ? "psram" : "internal",
-        joint_mean_[0], joint0_std, vision_mean_intensity_, vision_std);
+    const float avg_mse = (mse_count_ > 0) ? (mse_sum_ / static_cast<float>(mse_count_)) : -1.0f;
+    mse_sum_   = 0.0f;
+    mse_count_ = 0;
+    if (avg_mse >= 0.0f) {
+      Serial.printf(
+          "[Node0][IL] step=%u n=%u mse=%.6f j0_mean=%.3f j0_std=%.3f vis_mean=%.2f vis_std=%.2f\n",
+          static_cast<unsigned>(step_counter),
+          static_cast<unsigned>(dataset_count_), avg_mse,
+          joint_mean_[0], joint0_std, vision_mean_intensity_, vision_std);
+    } else {
+      Serial.printf(
+          "[Node0][IL] step=%u n=%u mse=n/a (< %u samples) j0_mean=%.3f vis_mean=%.2f\n",
+          static_cast<unsigned>(step_counter),
+          static_cast<unsigned>(dataset_count_),
+          static_cast<unsigned>(calib::kMinSamplesForTrain),
+          joint_mean_[0], vision_mean_intensity_);
+    }
     if (W0_ != nullptr && is_trained_) {
       saveWeights();
     }
@@ -153,6 +166,15 @@ void IlTrainer::trainStep() {
     for (size_t j = 0; j < 16; ++j) acc += row[j] * h1[j];
     pred[i] = acc;
   }
+
+  // Accumulate MSE for periodic logging.
+  float mse = 0.0f;
+  for (size_t i = 0; i < 6; ++i) {
+    const float e = pred[i] - sample.joints[i];
+    mse += e * e;
+  }
+  mse_sum_   += mse / 6.0f;
+  mse_count_ += 1;
 
   // Backward pass
   float d_out2[6];
