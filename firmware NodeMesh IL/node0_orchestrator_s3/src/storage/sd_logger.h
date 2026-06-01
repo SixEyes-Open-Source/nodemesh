@@ -57,6 +57,17 @@ public:
   // re-collecting.  Irreversible — confirm before calling.
   void clearLog();
 
+  // Trial outcome logging for success-rate measurement.
+  // trial start   — begin a timed trial, records start_ms in CSV
+  // trial pass/fail — close trial with outcome; appends row to /trials.csv
+  // CSV columns: trial_id, episode_id, outcome(pass=1/fail=0),
+  //              duration_ms, dataset_n, session_id
+  void trialStart();
+  void trialEnd(bool pass);
+
+  uint32_t trialCount()   const { return trial_id_; }
+  bool     trialOpen()    const { return trial_open_; }
+
   uint32_t droppedPackets()  const { return dropped_; }
   uint32_t currentEpisode()  const { return episode_id_; }
   bool     episodeOpen()     const { return episode_open_; }
@@ -84,6 +95,12 @@ private:
   uint32_t dropped_              = 0;
   uint32_t episode_id_           = 0;
   bool     episode_open_         = false;
+
+  // Trial state
+  static constexpr const char *kTrialPath = "/trials.csv";
+  uint32_t trial_id_             = 0;
+  uint32_t trial_start_ms_       = 0;
+  bool     trial_open_           = false;
 };
 
 } // namespace node0

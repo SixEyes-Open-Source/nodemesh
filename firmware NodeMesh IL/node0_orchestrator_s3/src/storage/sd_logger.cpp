@@ -240,4 +240,65 @@ void SdLogger::clearLog() {
   Serial.println("[Node0][SD] log cleared — ready for new demos");
 }
 
+void SdLogger::trialStart() {
+  if (trial_open_) {
+    Serial.println("[Node0][SD] trial start ignored: trial already open");
+    return;
+  }
+  ++trial_id_;
+  trial_start_ms_ = millis();
+  trial_open_     = true;
+  Serial.printf("[Node0][SD] trial %u START\n", static_cast<unsigned>(trial_id_));
+}
+
+void SdLogger::trialEnd(bool pass) {
+  if (!trial_open_) {
+    Serial.println("[Node0][SD] trial end ignored: no trial open");
+    return;
+  }
+  trial_open_ = false;
+  const uint32_t duration_ms = millis() - trial_start_ms_;
+
+  if (!sd_ready_) {
+    Serial.println("[Node0][SD] trial end: SD not ready, result lost");
+    return;
+  }
+
+  // Write CSV header on first trial.
+  if (!SD.exists(kTrialPath)) {
+    File hdr = SD.open(kTrialPath, FILE_WRITE);
+    if (hdr) {
+      hdr.println("trial_id,episode_id,outcome,duration_ms,session_id");
+      hdr.close();
+    }
+  }
+
+  File f = SD.open(kTrialPath, FILE_APPEND);
+  if (!f) {
+    Serial.println("[Node0][SD] trial end: failed to open trials.csv");
+    return;
+  }
+
+  // Read session_id from NVS to annotate which training session produced this.
+  Preferences prefs;
+  prefs.begin("sdlogger", true);
+  const uint32_t sess = prefs.getUInt("sess_id", 0);
+  prefs.end();
+
+  char row[64];
+  snprintf(row, sizeof(row), "%u,%u,%u,%u,%u",
+           static_cast<unsigned>(trial_id_),
+           static_cast<unsigned>(episode_id_),
+           static_cast<unsigned>(pass ? 1 : 0),
+           static_cast<unsigned>(duration_ms),
+           static_cast<unsigned>(sess));
+  f.println(row);
+  f.close();
+
+  Serial.printf("[Node0][SD] trial %u %s  duration=%u ms\n",
+                static_cast<unsigned>(trial_id_),
+                pass ? "PASS" : "FAIL",
+                static_cast<unsigned>(duration_ms));
+}
+
 } // namespace node0

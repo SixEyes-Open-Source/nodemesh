@@ -16,7 +16,13 @@ std::array<float, 6> AdcReader::readJointAngles() {
 
   std::array<float, 6> out{};
   for (size_t i = 0; i < out.size(); ++i) {
-    out[i] = static_cast<float>(raw[i]) / 4095.0f;
+    const float sample = static_cast<float>(raw[i]) / 4095.0f;
+    if (ema_[i] < 0.f) {
+      ema_[i] = sample;  // seed on first call
+    } else {
+      ema_[i] += kAlpha * (sample - ema_[i]);
+    }
+    out[i] = ema_[i];
   }
   return out;
 }

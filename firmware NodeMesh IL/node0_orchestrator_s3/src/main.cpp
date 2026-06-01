@@ -69,13 +69,20 @@ void handleSerialCommands() {
         // Wipe the log file and reset episode state.  This is irreversible.
         // Use before re-collecting demonstrations after a bad session.
         node0::SdLogger::instance().clearLog();
+      } else if (buf == "trial start") {
+        node0::SdLogger::instance().trialStart();
+      } else if (buf == "trial pass") {
+        node0::SdLogger::instance().trialEnd(true);
+      } else if (buf == "trial fail") {
+        node0::SdLogger::instance().trialEnd(false);
       } else if (buf == "status") {
-        Serial.printf("[Node0][CMD] mode=%s  episode=%u  ep_open=%s\n",
+        Serial.printf("[Node0][CMD] mode=%s  episode=%u  ep_open=%s  trials=%u\n",
                       g_mode == NodeMode::kTeleopLog ? "TELEOP_LOG" : "INFER",
                       static_cast<unsigned>(node0::SdLogger::instance().currentEpisode()),
-                      node0::SdLogger::instance().episodeOpen() ? "yes" : "no");
+                      node0::SdLogger::instance().episodeOpen() ? "yes" : "no",
+                      static_cast<unsigned>(node0::SdLogger::instance().trialCount()));
       } else if (buf.length() > 0) {
-        Serial.println("[Node0][CMD] unknown command (try: mode teleop / mode infer / ep start / ep stop / status)");
+        Serial.println("[Node0][CMD] unknown command (try: mode teleop/infer / ep start/stop / trial start/pass/fail / log clear / status)");
       }
       buf = "";
     } else {
@@ -123,7 +130,7 @@ void setup() {
   // 1.28 s of the live ring buffer.
   node0::IlTrainer::instance().loadFromLog();
 
-  Serial.println("[Node0] Boot complete. Commands: mode teleop / mode infer / ep start / ep stop / status / log clear");
+  Serial.println("[Node0] Boot complete. Commands: mode teleop/infer / ep start/stop / trial start/pass/fail / log clear / status");
 }
 
 // ---------------------------------------------------------------------------
@@ -168,8 +175,22 @@ void loop() {
 
     } else {
       // INFER mode: IL policy generates targets directly.
+      // Measure latency for paper reporting (printed every 200 inferences).
+      const uint32_t t0_us = micros();
       node0::IlTrainer::instance().infer(packet, targets_deg);
+      const uint32_t infer_us = micros() - t0_us;
+
       node0::MotionController::instance().setTargets(targets_deg);
+
+      static uint32_t infer_counter = 0;
+      static uint32_t infer_latency_sum_us = 0;
+      infer_latency_sum_us += infer_us;
+      if ((++infer_counter % 200U) == 0U) {
+        Serial.printf("[Node0][INFER] avg_latency=%u us  last=%u us\n",
+                      static_cast<unsigned>(infer_latency_sum_us / 200U),
+                      static_cast<unsigned>(infer_us));
+        infer_latency_sum_us = 0;
+      }
     }
   }
 
