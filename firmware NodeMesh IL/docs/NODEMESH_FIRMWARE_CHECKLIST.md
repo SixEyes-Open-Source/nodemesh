@@ -64,6 +64,14 @@
       Pure Python mirror of il_trainer.cpp (same Kaiming init, MSE loss, factored grad-clip, SGD).
       26/26 tests passing. See `tools/test_il_training.py`.
 - [x] Add mode switching: `TELEOP_LOG` → `INFER` with NVS persistence across reboots.
+- [x] Add episode boundary markers (`ep start` / `ep stop`) written inline in log stream as 32-byte `EpisodeMarker` records (magic `0x4E4D4550`).
+- [x] Add MSE convergence signal: periodic serial print of running MSE every 2000 training steps so operator knows when to switch to `INFER`.
+- [x] Add SD → PSRAM episode loader (`loadFromLog()`): at boot, scans log for closed episodes and fills training buffer at uniform stride. Only closed (start+stop) episodes loaded.
+- [x] Add `log clear` serial command to delete log file and reset all state before re-collecting.
+- [x] Add ADC EMA filter on Node1 (α=0.2, ~20 ms time constant) to reduce label noise from 12-bit ADC jitter.
+- [x] Add inference latency measurement: `micros()` around `infer()`, printed every 200 inferences as `avg_latency=XXX us`.
+- [x] Add trial outcome CSV logger (`trial start` / `trial pass` / `trial fail` → `/trials.csv` on SD) for success-rate measurement in paper evaluation.
+- [x] Update `validate_log.py` to parse `EpisodeMarker` records and report episode slices with duration and packet count.
 
 ## Phase E — Inference Episode
 
