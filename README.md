@@ -116,7 +116,7 @@ $$\mathcal{L} = \frac{1}{6}\sum_{i=1}^{6}(\hat{y}_i - y_i)^2$$
 **Gradient** passed to the output layer:
 $$\delta_i = \frac{2}{6}(\hat{y}_i - y_i)$$
 
-**Weight init:** Kaiming He uniform per layer — $w \sim U(-l, l)$, $l = \sqrt{6 / \text{fan\_in}}$.
+**Weight init:** Kaiming He uniform per layer — $w \sim U(-l, l)$, $l = \sqrt{6 / \text{fan-in}}$.
 
 **Gradient norm clipping** (factored, O(n) cost):
 $$\text{if } \|g\| > c: \quad \eta \leftarrow \eta \cdot \frac{c}{\|g\|}$$
